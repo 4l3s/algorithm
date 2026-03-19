@@ -91,3 +91,49 @@ public class StackVM {
         return stack.toArray(new Long[0]);
     }
 }
+
+
+
+
+
+2这道算法也很有意思,刚开始的的描述很有误导性，以为要用优先队列deque，其实暴力使用才是最好的
+【软件认证】选择最匹配内存部署虚拟机
+
+虚拟化是云计算的重要技术之一，使用虚拟化技术，可以在一台物理机上部署一个或多个虚拟机，以优化资源的使用。
+
+现有一批物理机记录于数组 capacities中，capacities[i] 表示编号为 i 的物理机初始内存大小；同时给出一批虚拟机部署请求requests， requests[j] 表示某虚拟机的所需内存。
+
+请按如下规则依次处理每个虚拟机部署请求，并返回每个虚拟机部署所在的物理机编号（或者 -1）：
+
+如果所有物理机的可用内存都不足，则该虚拟机部署失败，结果为 -1；
+否则，在满足虚拟机所需内存的所有物理机中，选择可用内存最小的；若仍有多台，则选择其中编号最小的。
+
+    static int[] dispatchRequestsOpti1(int[] capacities, int[] requests) {
+
+       int[] valid=capacities.clone();
+       int minVal=Integer.MAX_VALUE;
+       int bestIndex=-1;
+       List<Integer> ans= new ArrayList<>();
+        for (int i = 0; i < requests.length; i++) {
+            minVal=Integer.MAX_VALUE;
+            bestIndex=-1;
+            for (int j = 0; j < valid.length;  j++) {
+                if(requests[i]<=valid[j]){
+                    if(valid[j]<minVal){
+                        minVal=valid[j];
+                        bestIndex=j;
+                    }
+                }
+            }
+            if(bestIndex != -1){
+                valid[bestIndex]-=requests[i];
+                ans.add(bestIndex);
+            }else{
+                ans.add(bestIndex);
+            }
+        }
+
+        return ans.stream().mapToInt(Integer::intValue).toArray();
+    }
+不用队列的原因是：体现在：必须用一个临时容器（如 List）把所有 poll 出来的 valid 但不满足的元素存起来，处理完当前请求后再全部 offer 回堆中。
+但正因为这个操作太笨重，实际工程和面试中都推荐直接用暴力扫描——它天然规避了这个问题，且简单可靠。
