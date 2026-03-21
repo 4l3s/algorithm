@@ -1,5 +1,5 @@
 # algorithm
-## 题目一 基于栈的虚拟机
+## 题目一：基于栈的虚拟机
 【软件认证】基于栈的虚拟机
 请你实现一个基于栈(先进后出)的虚拟机，执行输入的指令cmds后返回从栈底到栈顶的数据。
 cmds是16进制字符串表示的字节流，字符为[0-9A-F]，字母为大写，每两个字符表示1个字节。内容是一串紧密排列的变长指令，每条指令格式为 [Op][Body]：
@@ -15,8 +15,7 @@ Body 为操作内容，长度和含义由 Op 决定。
 
 这到提有点意思，其他几个操作都没啥，关键是这个跳转，你要跳转到合适的字节去，我当时想法就是遍历变cmds字符串，然后找到每一个op的位置字节号是多少保存起来，对应的字符串index也保存起来。其实在这里应该能找到规律了，
 更好的方法是，不用遍历  cmds 是 hex 字符串，2 字符 = 1 字节 → 所以 字节偏移 × 2 = 字符索引。直接就定位，后面按照字节循环这个比较好
-import java.util.*;
-
+```java
 public class StackVM {
     public static Long[] execute(String cmds) {
         Deque<Long> stack = new ArrayDeque<>();
@@ -92,7 +91,7 @@ public class StackVM {
         return stack.toArray(new Long[0]);
     }
 }
-
+```
 
 
 
