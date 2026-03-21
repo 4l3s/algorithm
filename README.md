@@ -1,5 +1,5 @@
 # algorithm
-## 题目一：基于栈的虚拟机
+## 题目1：基于栈的虚拟机
 【软件认证】基于栈的虚拟机
 请你实现一个基于栈(先进后出)的虚拟机，执行输入的指令cmds后返回从栈底到栈顶的数据。
 cmds是16进制字符串表示的字节流，字符为[0-9A-F]，字母为大写，每两个字符表示1个字节。内容是一串紧密排列的变长指令，每条指令格式为 [Op][Body]：
@@ -96,7 +96,8 @@ public class StackVM {
 
 
 
-2这道算法也很有意思,刚开始的的描述很有误导性，以为要用优先队列deque，其实暴力使用才是最好的
+## 题目2：选择最匹配内存部署虚拟机
+这道算法也很有意思,刚开始的的描述很有误导性，以为要用优先队列deque，其实暴力使用也可以，你以为暴力可以其实用红黑数才是完美的
 【软件认证】选择最匹配内存部署虚拟机
 
 虚拟化是云计算的重要技术之一，使用虚拟化技术，可以在一台物理机上部署一个或多个虚拟机，以优化资源的使用。
@@ -107,7 +108,7 @@ public class StackVM {
 
 如果所有物理机的可用内存都不足，则该虚拟机部署失败，结果为 -1；
 否则，在满足虚拟机所需内存的所有物理机中，选择可用内存最小的；若仍有多台，则选择其中编号最小的。
-
+```java
     static int[] dispatchRequestsOpti1(int[] capacities, int[] requests) {
 
        int[] valid=capacities.clone();
@@ -135,9 +136,11 @@ public class StackVM {
 
         return ans.stream().mapToInt(Integer::intValue).toArray();
     }
-不用队列的原因是：体现在：必须用一个临时容器（如 List）把所有 poll 出来的 valid 但不满足的元素存起来，处理完当前请求后再全部 offer 回堆中。
+```
+**不用队列的原因是：**体现在：必须用一个临时容器（如 List）把所有 poll 出来的 valid 但不满足的元素存起来，处理完当前请求后再全部 offer 回堆中。
 但正因为这个操作太笨重，实际工程和面试中都推荐直接用暴力扫描——它天然规避了这个问题，且简单可靠。
 
+**更完美的方法(红黑树)：**
 这里还可以优化。暴力搜索复杂度是O(m*n),在java中5千万一般需要一秒，现代cpu是10的8次方 ops/sec
 使用 TreeMap（或优先队列 + 懒删除 + 正确策略）
 我们可以维护一个结构：
@@ -149,9 +152,7 @@ value: 所有具有该内存的物理机编号（用 TreeSet 自动排序）
 获取该内存下编号最小的机器：treeSet.first()
 更新机器内存：从旧内存集合中移除，加入新内存集合
 所有操作 O(log n)，总复杂度 O(m log n)
-
-import java.util.*;
-
+```java
 public class Solution {
     public int[] deployVMs(int[] capacities, int[] requests) {
         int n = capacities.length;
@@ -202,3 +203,4 @@ public class Solution {
         return result;
     }
 }
+```
