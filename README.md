@@ -204,3 +204,142 @@ public class Solution {
     }
 }
 ```
+这里面有个在 Java 标准库中，只有基于红黑树（Red-Black Tree）实现的有序集合/映射才提供 ceiling、floor 等导航方法。这些方法是 NavigableMap 和 NavigableSet 接口定义的核心功能。
+| 方法 | 含义 |
+|------|------|
+| `lowerKey(key)`   | < key 的最大值（严格小于）|
+| `floorKey(key)`   | ≤ key 的最大值 |
+| `ceilingKey(key)` | ≥ key 的最小值 |
+| `higherKey(key)`  | > key 的最小值（严格大于）|
+在熟悉一下 如何定义比较器 TreeSet<MyClass> set = new TreeSet<>(Comparator.comparing(MyClass::getName));
+
+##题目3 简易画图
+请设计一个简易画图程序，画布由 100 * 100 个大小相同的方格组成，左上角方格的位置为 [0, 0]
+
+屏幕中一个矩形位置（左上角）用 [row, col] 表示，宽和高分别用 width 和 height 表示。
+
+例如：黄色矩形的行、列位置为 [2, 7]，宽、高分别为 1、3
+
+PbrushSystem() — 初始化系统
+drawRectangle(int row, int col, int width, int height) -- 在位置 [row, col] 绘制一个大小为 width * height 的矩形：若出现重叠或超出边界，则直接返回 false；否则，绘制成功并返回 true。
+eraseArea(int row, int col, int width, int height) -- 选中所有与区域 [row, col, width, height] 有重叠的矩形完整擦除，返回擦除的矩形个数。
+queryArea() -- 计算完全覆盖所有矩形的最小矩形区域的面积，若无矩形则为 0 
+
+思考：
+这里有个意思的判断，如何判断相交：
+之前想到是任何一个点在一个矩形里面就相交，比如矩形B的四个点中任何一个点在A中就行，但其实这个考虑不周，还有一种情况是十字相交的，
+所以 **重叠检查：使用标准矩形重叠算法（两个矩形不重叠的条件是：一个在另一个的左边、右边、上边或下边）**
+```java
+public class PbrushSystem {
+    // 画布大小
+    private static final int CANVAS_SIZE = 100;
+    
+    // 存储所有绘制的矩形
+    private List<Rectangle> rectangles;
+    
+    // 定义矩形类
+    private static class Rectangle {
+        int row, col, width, height;
+        
+        public Rectangle(int row, int col, int width, int height) {
+            this.row = row;
+            this.col = col;
+            this.width = width;
+            this.height = height;
+        }
+        
+        // 检查是否与另一个矩形重叠
+        public boolean overlapsWith(Rectangle other) {
+            return !(this.col + this.width <= other.col || 
+                    other.col + other.width <= this.col ||
+                    this.row + this.height <= other.row || 
+                    other.row + other.height <= this.row);
+        }
+        
+        // 检查是否在画布边界内
+        public boolean isWithinBounds() {
+            return row >= 0 && col >= 0 && 
+                   row + height <= CANVAS_SIZE && 
+                   col + width <= CANVAS_SIZE;
+        }
+    }
+    
+    public PbrushSystem() {
+        rectangles = new ArrayList<>();
+    }
+    
+    public boolean drawRectangle(int row, int col, int width, int height) {
+        // 检查参数有效性
+        if (width <= 0 || height <= 0) {
+            return false;
+        }
+        
+        Rectangle newRect = new Rectangle(row, col, width, height);
+        
+        // 检查是否超出边界
+        if (!newRect.isWithinBounds()) {
+            return false;
+        }
+        
+        // 检查是否与现有矩形重叠
+        for (Rectangle existing : rectangles) {
+            if (newRect.overlapsWith(existing)) {
+                return false;
+            }
+        }
+        
+        // 绘制成功，添加到列表
+        rectangles.add(newRect);
+        return true;
+    }
+    
+    public int eraseArea(int row, int col, int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return 0;
+        }
+        
+        Rectangle eraseRegion = new Rectangle(row, col, width, height);
+        
+        // 找出所有与擦除区域重叠的矩形
+        Iterator<Rectangle> iterator = rectangles.iterator();
+        int erasedCount = 0;
+        
+        while (iterator.hasNext()) {
+            Rectangle rect = iterator.next();
+            if (rect.overlapsWith(eraseRegion)) {
+                iterator.remove();
+                erasedCount++;
+            }
+        }
+        
+        return erasedCount;
+    }
+    
+    public int queryArea() {
+        if (rectangles.isEmpty()) {
+            return 0;
+        }
+        
+        // 初始化边界
+        int minRow = Integer.MAX_VALUE;
+        int minCol = Integer.MAX_VALUE;
+        int maxRow = Integer.MIN_VALUE; // 最大行坐标（底部）
+        int maxCol = Integer.MIN_VALUE; // 最大列坐标（右边界）
+        
+        // 遍历所有矩形，找到整体的边界
+        for (Rectangle rect : rectangles) {
+            minRow = Math.min(minRow, rect.row);
+            minCol = Math.min(minCol, rect.col);
+            maxRow = Math.max(maxRow, rect.row + rect.height);
+            maxCol = Math.max(maxCol, rect.col + rect.width);
+        }
+        
+        // 计算最小包围矩形的面积
+        int totalWidth = maxCol - minCol;
+        int totalHeight = maxRow - minRow;
+        
+        return totalWidth * totalHeight;
+    }
+}
+```
+
