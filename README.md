@@ -137,3 +137,68 @@ public class StackVM {
     }
 不用队列的原因是：体现在：必须用一个临时容器（如 List）把所有 poll 出来的 valid 但不满足的元素存起来，处理完当前请求后再全部 offer 回堆中。
 但正因为这个操作太笨重，实际工程和面试中都推荐直接用暴力扫描——它天然规避了这个问题，且简单可靠。
+
+这里还可以优化。暴力搜索复杂度是O(m*n),在java中5千万一般需要一秒，现代cpu是10的8次方 ops/sec
+使用 TreeMap（或优先队列 + 懒删除 + 正确策略）
+我们可以维护一个结构：
+TreeMap<Integer, TreeSet<Integer>> memToMachines
+key: 可用内存大小
+value: 所有具有该内存的物理机编号（用 TreeSet 自动排序）
+这样：
+查找 ≥ req 的最小内存：map.ceilingKey(req)
+获取该内存下编号最小的机器：treeSet.first()
+更新机器内存：从旧内存集合中移除，加入新内存集合
+所有操作 O(log n)，总复杂度 O(m log n)
+
+import java.util.*;
+
+public class Solution {
+    public int[] deployVMs(int[] capacities, int[] requests) {
+        int n = capacities.length;
+        int[] available = Arrays.copyOf(capacities, n);
+        
+        // TreeMap: 可用内存 -> 有序的机器编号集合
+        TreeMap<Integer, TreeSet<Integer>> memToMachines = new TreeMap<>();
+        
+        // 初始化
+        for (int i = 0; i < n; i++) {
+            memToMachines.computeIfAbsent(capacities[i], k -> new TreeSet<>()).add(i);
+        }
+        
+        int[] result = new int[requests.length];
+        
+        for (int i = 0; i < requests.length; i++) {
+            int req = requests[i];
+            
+            // 找到 >= req 的最小可用内存
+            Integer mem = memToMachines.ceilingKey(req);
+            if (mem == null) {
+                result[i] = -1;
+                continue;
+            }
+            
+            // 获取该内存下编号最小的机器
+            TreeSet<Integer> machines = memToMachines.get(mem);
+            int machineId = machines.first();
+            
+            // 从旧内存集合中移除
+            machines.remove(machineId);
+            if (machines.isEmpty()) {
+                memToMachines.remove(mem);
+            }
+            
+            // 更新机器内存
+            int newMem = mem - req;
+            available[machineId] = newMem;
+            
+            // 加入新内存集合
+            if (newMem > 0) { // 可选：0 内存也可以保留
+                memToMachines.computeIfAbsent(newMem, k -> new TreeSet<>()).add(machineId);
+            }
+            
+            result[i] = machineId;
+        }
+        
+        return result;
+    }
+}
