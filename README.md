@@ -213,7 +213,7 @@ public class Solution {
 | `higherKey(key)`  | > key 的最小值（严格大于）|
 在熟悉一下 如何定义比较器 TreeSet<MyClass> set = new TreeSet<>(Comparator.comparing(MyClass::getName));
 
-##题目3 简易画图
+## 题目3 简易画图
 请设计一个简易画图程序，画布由 100 * 100 个大小相同的方格组成，左上角方格的位置为 [0, 0]
 
 屏幕中一个矩形位置（左上角）用 [row, col] 表示，宽和高分别用 width 和 height 表示。
