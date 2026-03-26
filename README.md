@@ -343,3 +343,47 @@ public class PbrushSystem {
 }
 ```
 
+
+## 题目四 计算任务运行总耗时
+**(1)带依赖的任务调度问题**
+
+现有一批待执行的任务tasks，tasks[i]=[taskType，depend]，i为任务编号，taskType 表示任
+务类型，共有 6 种，不同类型的任务执行耗时参考下面的表格，depend 表示所依赖的任务编号（-1表
+示无依赖）。
+请设计一个满足如下要求的调度模块，完成上述任务的执行，返回总耗时：
+·系统中固定有6个NPU在并行运行，分别执行这6 种类型的任务（一个NPU对应一种类型）；一个
+NPU内的任务串行执行。
+·对于无依赖的任务，都是ready状态的；对于存在依赖的任务，须等待所依赖的任务执行完才能变成
+ready状态。
+当NPU空闲时，选择处于ready状态的任务立即执行，若有多个，选择编号小的。
+6 种任务类型对应的执行时间
+```java
+taskMap.put(1, 9);
+taskMap.put(2, 15);
+taskMap.put(3, 21);
+taskMap.put(4, 18);
+taskMap.put(5, 30);
+taskMap.put(6, 42);
+```
+ 解题思路
+解析输入：构建任务列表 tasks[i] = [type, depend]
+初始化：
+finishTime[i]：任务 i 完成时间（初始 -1）
+npuFree[7]：NPU 1~6 的空闲时间（初始为 0）
+readyQueue：优先队列（按任务编号升序）
+初始 ready 任务：depend == -1 的任务加入 readyQueue
+模拟调度：
+每次从 readyQueue 取出编号最小的任务
+获取其类型 t，查表得执行时间 duration
+该任务开始时间 = max(npuFree[t], 当前全局时间?) → 实际上我们不需要全局时间，只需按事件驱动
+关键：任务开始时间 = npuFree[t]（因为 NPU 必须等自己空闲）
+任务结束时间 = npuFree[t] + duration
+更新 npuFree[t] = 结束时间
+更新 finishTime[i] = 结束时间
+检查所有未完成任务，若其依赖的任务已完成，则变为 ready（加入队列）
+重复直到所有任务完成
+返回最大 finishTime
+⚠️ 注意：不能用“全局时间”推进，而是事件驱动——每次执行一个 ready 任务，然后检查新 ready 任务。
+但有一个陷阱：多个任务可能在不同时间点 become ready，但我们只在任务完成时才检查依赖。
+✅ 正确做法：每当一个任务完成，就遍历所有未完成任务，看是否有依赖已满足，若有且未入队，则加入 readyQueue。
+由于 readyQueue 是优先队列（按编号），每次取最小编号即可。
