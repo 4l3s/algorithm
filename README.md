@@ -387,6 +387,27 @@ readyQueue：优先队列（按任务编号升序）
 但有一个陷阱：多个任务可能在不同时间点 become ready，但我们只在任务完成时才检查依赖。
 ✅ 正确做法：每当一个任务完成，就遍历所有未完成任务，看是否有依赖已满足，若有且未入队，则加入 readyQueue。
 由于 readyQueue 是优先队列（按编号），每次取最小编号即可。
+```java
+int schedule(List<Task> tasks){
+    if(tasks == null || tasks.isEmpty()){
+        return 0;
+}
+    int n = tasks.size();
+    int[] finishTime =  new int[n];
+    Arrays.fill(finishTime,-1);
+    long[] npuFree = new long[7];
+    PriorityQueue<Integer> readyQueue = new PriorityQueue<>();
+    for(int i = 0;i<n;i++){
+        if(tasks.get(i).depend == -1){
+            readyQueue.offer(i);
+            }
+}
+ while(!readyQueue.isEmpty()){
+    int taskId = readyQueue.poll();
+    Task task = tasks.get(taskId);
+}
+    
+}
 
 
 
