@@ -405,6 +405,26 @@ int schedule(List<Task> tasks){
  while(!readyQueue.isEmpty()){
     int taskId = readyQueue.poll();
     Task task = tasks.get(taskId);
+    int type = task.taskType;
+    int dep = task.depend;
+    int duration = TASK_DURATION.getOrdefault(type,0);
+    long startTime = 0;
+    if(dep == -1){
+        startTime = npuFree[type];
+        }else{
+        startTime= Math.max(npuFree[type],finishTime[dep]);
+    }
+long end = startTime + duration;
+npuFree[type]=end;
+finishTime[taskId]= endTime;
+//激活所有直接依赖此任务的后续任务
+for(int j=0;j<n;j++){
+if(finishTime[j]==-1 && tasks.get(j).depend == taskId){
+readyQueue.offer(j);
+}
+}
+
+
 }
     
 }
