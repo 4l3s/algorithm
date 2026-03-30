@@ -346,6 +346,7 @@ public class PbrushSystem {
 
 ## 题目四 计算任务运行总耗时
 **(1)带依赖的任务调度问题**
+ 带资源约束的依赖任务调度问题
 
 现有一批待执行的任务tasks，tasks[i]=[taskType，depend]，i为任务编号，taskType 表示任
 务类型，共有 6 种，不同类型的任务执行耗时参考下面的表格，depend 表示所依赖的任务编号（-1表
@@ -388,45 +389,64 @@ readyQueue：优先队列（按任务编号升序）
 ✅ 正确做法：每当一个任务完成，就遍历所有未完成任务，看是否有依赖已满足，若有且未入队，则加入 readyQueue。
 由于 readyQueue 是优先队列（按编号），每次取最小编号即可。
 ```java
-int schedule(List<Task> tasks){
-    if(tasks == null || tasks.isEmpty()){
-        return 0;
-}
-    int n = tasks.size();
-    int[] finishTime =  new int[n];
-    Arrays.fill(finishTime,-1);
-    long[] npuFree = new long[7];
-    PriorityQueue<Integer> readyQueue = new PriorityQueue<>();
-    for(int i = 0;i<n;i++){
-        if(tasks.get(i).depend == -1){
-            readyQueue.offer(i);
+    int schedule(List<Task> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return 0;
+        }
+
+        int n = tasks.size();
+        int[] finishTime = new int[n]; // finishTime[i] = 任务 i 的完成时刻
+        Arrays.fill(finishTime, -1);
+
+        // npuFree[type] = 类型为 type 的 NPU 下次空闲时间（type 1～6）
+        long[] npuFree = new long[7]; // 索引 0 不用，1～6 对应类型
+
+        // ready 队列：存储任务编号（即 List 中的索引），按编号升序
+        PriorityQueue<Integer> readyQueue = new PriorityQueue<>();
+
+        // 初始化：将无依赖的任务加入 ready 队列
+        for (int i = 0; i < n; i++) {
+            if (tasks.get(i).depend == -1) {
+                readyQueue.offer(i);
             }
-}
- while(!readyQueue.isEmpty()){
-    int taskId = readyQueue.poll();
-    Task task = tasks.get(taskId);
-    int type = task.taskType;
-    int dep = task.depend;
-    int duration = TASK_DURATION.getOrdefault(type,0);
-    long startTime = 0;
-    if(dep == -1){
-        startTime = npuFree[type];
-        }else{
-        startTime= Math.max(npuFree[type],finishTime[dep]);
-    }
-long end = startTime + duration;
-npuFree[type]=end;
-finishTime[taskId]= endTime;
-//激活所有直接依赖此任务的后续任务
-for(int j=0;j<n;j++){
-if(finishTime[j]==-1 && tasks.get(j).depend == taskId){
-readyQueue.offer(j);
-}
-}
+        }
 
+        // 调度主循环
+        while (!readyQueue.isEmpty()) {
+            int taskId = readyQueue.poll(); // 取编号最小的 ready 任务
+            Task task = tasks.get(taskId);
+            int type = task.taskType;
+            int dep = task.depend;
 
-}
-    
+            // 获取该类型任务的执行时间
+            int duration = TASK_DURATION.getOrDefault(type, 0);
+            if (duration <= 0) {
+                throw new IllegalArgumentException("Unknown task type: " + type);
+            }
+
+            // 计算开始时间：必须等 NPU 空闲 AND 依赖任务完成
+            long startTime;
+            if (dep == -1) {
+                startTime = npuFree[type];
+            } else {
+                // 依赖任务已完成，其完成时间已知
+                startTime = Math.max(npuFree[type], finishTime[dep]);
+            }
+
+            long endTime = startTime + duration;
+            npuFree[type] = endTime;
+            finishTime[taskId] = (int) endTime;
+
+            // 激活所有直接依赖此任务的后续任务
+            for (int j = 0; j < n; j++) {
+                if (finishTime[j] == -1 && tasks.get(j).depend == taskId) {
+                    readyQueue.offer(j);
+                }
+            }
+        }
+
+        // 总耗时 = 所有任务完成时间的最大值
+        return Arrays.stream(finishTime).max().orElse(0);
 }
 ```
 
