@@ -458,53 +458,183 @@ readyQueue：优先队列（按任务编号升序）
 时，阻塞等待。当有多台服务器可满足该任务的内存要求时，优先部署到编号小的服务器上。
 一个任务不能跨服务器部署，但一台服务器上能同时部署多个任务。
 ```java
+package org.example;
 
+
+
+
+import java.util.*;
+
+public class TaskSchedulerV2 {
+
+    // 任务类：存储任务的内存需求和执行耗时
+    static class Task {
+        final int memory; // 任务所需内存
+        final int cost;   // 任务执行耗时
+        public Task(int memory, int cost) {
+            this.memory = memory;
+            this.cost = cost;
+        }
+    }
+
+    // 运行中的任务类：记录任务的结束时间和内存占用
+    static class RunningTask {
+        final int endTime; // 任务结束的时间点
+        final int memory;  // 任务占用的内存
+        public RunningTask(int endTime, int memory) {
+            this.endTime = endTime;
+            this.memory = memory;
+        }
+    }
+
+    // 服务器类：模拟服务器的内存管理和任务调度
+    static class Server {
+        final int maxMemory; // 服务器最大内存容量
+        int usedMemory = 0;  // 当前已使用的内存
+        // 优先队列（最小堆），按任务结束时间排序，用于快速获取最早结束的任务
+        final PriorityQueue<RunningTask> runningTasks = new PriorityQueue<>(Comparator.comparingInt(t -> t.endTime));
+
+        public Server(int maxMemory) {
+            this.maxMemory = maxMemory;
+        }
+
+        // 释放当前时间点已完成的任务，回收内存
+        public void releaseFinished(int currentTime) {
+            // 循环检查堆顶（最早结束）的任务是否已完成
+            while (!runningTasks.isEmpty() && runningTasks.peek().endTime <= currentTime) {
+                usedMemory -= runningTasks.poll().memory; // 移除已完成任务并回收内存
+            }
+        }
+
+        // 判断服务器是否能容纳指定内存的任务
+        public boolean canFit(int memory) {
+            return usedMemory + memory <= maxMemory;
+        }
+
+        // 将任务分配给服务器执行
+        public void assign(int startTime, int cost, int memory) {
+            runningTasks.offer(new RunningTask(startTime + cost, memory)); // 将任务加入优先队列
+            usedMemory += memory; // 增加已用内存
+        }
+
+        // 获取服务器中最早结束的任务的结束时间
+        public int getNextEndTime() {
+            return runningTasks.isEmpty() ? Integer.MAX_VALUE : runningTasks.peek().endTime;
+        }
+    }
+
+    // 调度任务的主方法
+    public static int scheduleTasks(int serverNum, int maxMemory, List<Task> tasks) {
+        // 创建服务器列表
+        List<Server> servers = new ArrayList<>();
+        for (int i = 0; i < serverNum; i++) {
+            servers.add(new Server(maxMemory));
+        }
+
+        int currentTime = 0;       // 当前时间
+        int globalFinishTime = 0;  // 所有任务完成的总时间
+
+        // 遍历每个任务，尝试分配
+        for (Task task : tasks) {
+            // 如果任务所需内存超过单台服务器最大内存，无法执行
+            if (task.memory > maxMemory) {
+                throw new IllegalArgumentException("Task memory exceeds server capacity");
+            }
+
+            boolean assigned = false;
+            // 循环直到任务被成功分配
+            while (!assigned) {
+                // 释放所有服务器上已完成的任务
+                for (Server s : servers) s.releaseFinished(currentTime);
+
+                // 寻找能容纳当前任务的服务器
+                Server chosen = null;
+                for (Server s : servers) {
+                    if (s.canFit(task.memory)) {
+                        chosen = s;
+                        break;
+                    }
+                }
+
+                // 如果找到合适的服务器，分配任务
+                if (chosen != null) {
+                    int finish = currentTime + task.cost; // 计算任务完成时间
+                    chosen.assign(currentTime, task.cost, task.memory); // 分配任务
+                    globalFinishTime = Math.max(globalFinishTime, finish); // 更新总完成时间
+                    assigned = true;
+                } else {
+                    // 如果没有服务器能容纳，跳转到下一个任务结束的时间点
+                    int nextTime = servers.stream()
+                            .mapToInt(Server::getNextEndTime)
+                            .min()
+                            .orElse(Integer.MAX_VALUE);
+                    currentTime = nextTime;
+                }
+            }
+        }
+
+        return globalFinishTime;
+    }
+
+    public static void main(String[] args) {
+        // 测试用例
+        List<Task> tasks = Arrays.asList(
+                new Task(6, 5),
+                new Task(5, 3),
+                new Task(4, 2),
+                new Task(8, 4)
+        );
+
+        int result = scheduleTasks(2, 10, tasks);
+        System.out.println("总完成时长: " + result); // 7
+    }
+}
 
 ```
 
-怎么想到定义个运行类RunningTask   放在优先队列里面
-在任务调度或模拟系统中，我们通常需要区分“静态的任务需求”（比如：我要跑多久、占多少内存）和“动态的运行状态”（比如：我几点几分结束、我现在占着哪台机器的内存）。
+怎么想到定义个运行类RunningTask   放在优先队列里面  
+在任务调度或模拟系统中，我们通常需要区分“静态的任务需求”（比如：我要跑多久、占多少内存）和“动态的运行状态”（比如：我几点几分结束、我现在占着哪台机器的内存）。  
 
 **分离“静态需求”与“动态状态”**  
-Task 类：是静态的。它只代表“需求”。比如：“我需要 5GB 内存，跑 10 秒”。它不知道自己在什么时候运行，也不知道自己在哪台服务器上。
-RunningTask 类：是动态的。它是 Task 在特定时间点、特定服务器上的实例化状态。它包含了“结束时间”（startTime + cost）。
-原因：如果不定义这个类，你就需要在其他地方（比如 Server 类里）维护额外的变量来记录“这个任务什么时候结束”，这会让代码变得混乱。将 endTime 封装在 RunningTask 里，符合面向对象编程的“高内聚”原则。
+Task 类：是静态的。它只代表“需求”。比如：“我需要 5GB 内存，跑 10 秒”。它不知道自己在什么时候运行，也不知道自己在哪台服务器上。  
+RunningTask 类：是动态的。它是 Task 在特定时间点、特定服务器上的实例化状态。它包含了“结束时间”（startTime + cost）。  
+原因：如果不定义这个类，你就需要在其他地方（比如 Server 类里）维护额外的变量来记录“这个任务什么时候结束”，这会让代码变得混乱。将 endTime 封装在 RunningTask 里，符合面向对象编程的“高内聚”原则。  
 
 **当前时间 = 所有服务器中，最早结束任务的结束时间  这种推进，一般都是用while 来搞么**  
-因为你的任务调度逻辑本质上是一个“阻塞-重试”模型。
-想象你在餐厅等位：
-你去前台问：“有桌吗？”（尝试分配）
-前台说：“满了。”（分配失败）
-你不能走（不能处理下一个任务），你也不能傻站着（不能死循环空转）。
-你必须“等到”有人吃完走出来（时间跳跃）。
-人一走出来，你“再次”去问前台：“现在有桌了吗？”（重试）
-这个“检查 -> 等待 -> 再检查”的过程，天然就是一个循环。  
+因为你的任务调度逻辑本质上是一个“阻塞-重试”模型。  
+想象你在餐厅等位：  
+你去前台问：“有桌吗？”（尝试分配）  
+前台说：“满了。”（分配失败）  
+你不能走（不能处理下一个任务），你也不能傻站着（不能死循环空转）。  
+你必须“等到”有人吃完走出来（时间跳跃）。  
+人一走出来，你“再次”去问前台：“现在有桌了吗？”（重试）  
+这个“检查 -> 等待 -> 再检查”的过程，天然就是一个循环。    
 
 **currentTime = 0; // 需要一个全局时间变量 这个我怎么能想到呢**  
-记住这个口诀：
+记住这个口诀：  
 有耗时，必有轴；  
 要模拟，先计时。  
-你之所以觉得“没想到”，是因为我们平时写代码大多是“处理数据”（比如遍历一个列表算总和），数据是静止的。但在这种调度题目里，你是在“模拟过程”，数据是流动的。
-触发点：
-只要题目里出现了“耗时”、“开始时间”、“结束时间”、“等待”这些词，你就要立刻反应过来：“我是导演，我手里必须拿着一个记录当前时间的场记板。”
-触发点：
-只要你需要“计算未来”（比如 startTime + cost），你就必须先知道“现在”。这个“现在”必须存在一个变量里。
-怎么训练这种直觉？
-下次看到题目，画个图。
-只要你的图画出来了“时间轴”，你就一定会想到定义这个变量。
-比如这道题，你在纸上画：
-时间轴： 0秒 -------- 3秒 -------- 5秒 -------- 8秒
-任务1： [====运行====]
-任务2：             [====运行====]
-当你画出这条横线（时间轴）的时候，你的笔尖指在哪里，哪里就是 currentTime。
-这时候你的手就会自然地写下：
-// 我需要一支笔来指着当前时间
-int currentTime = 0;
+你之所以觉得“没想到”，是因为我们平时写代码大多是“处理数据”（比如遍历一个列表算总和），数据是静止的。但在这种调度题目里，你是在“模拟过程”，数据是流动的。  
+触发点：  
+只要题目里出现了“耗时”、“开始时间”、“结束时间”、“等待”这些词，你就要立刻反应过来：“我是导演，我手里必须拿着一个记录当前时间的场记板。”  
+触发点：  
+只要你需要“计算未来”（比如 startTime + cost），你就必须先知道“现在”。这个“现在”必须存在一个变量里。  
+怎么训练这种直觉？  
+下次看到题目，画个图。  
+只要你的图画出来了“时间轴”，你就一定会想到定义这个变量。  
+比如这道题，你在纸上画：  
+时间轴： 0秒 -------- 3秒 -------- 5秒 -------- 8秒  
+任务1： [====运行====]  
+任务2：             [====运行====]  
+当你画出这条横线（时间轴）的时候，你的笔尖指在哪里，哪里就是 currentTime。  
+这时候你的手就会自然地写下：  
+// 我需要一支笔来指着当前时间  
+int currentTime = 0;  
 
 **总结**
 你不是想不到，你是把这道题当成了“数学计算题”（算总数），而忽略了它其实是“物理模拟题”（模拟过程）。
-1. 必须或通常使用优先队列的场景
-当调度策略需要根据任务的动态属性（如优先级、截止时间、剩余运行时间等）来决定下一个执行哪个任务时，优先队列是最高效的选择（通常基于堆实现，插入和取出最优元素的时间复杂度为 
+1. 必须或通常使用优先队列的场景  
+当调度策略需要根据任务的动态属性（如优先级、截止时间、剩余运行时间等）来决定下一个执行哪个任务时，优先队列是最高效的选择（通常基于堆实现，插入和取出最优元素的时间复杂度为   
 O(log n)
 O(logn) ）。
 优先级调度 (Priority Scheduling): 显然需要，总是选择优先级最高的任务。
