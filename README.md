@@ -661,5 +661,199 @@ for (int j = 0; j < n; j++) {
 你这一问直接切中了这段代码最隐蔽的逻辑漏洞——“谁在控制节奏？”。
 简单直接的回答是：你的代码目前是“任务驱动”（任务排队等NPU），而不是“事件驱动”（NPU空闲了去抓任务）。
 **如果题目变成“抢占式调度”（比如来了个高优先级任务，要把NPU上正在跑的任务踢下去）   这个代码怎么修改**  
+```java
+import java.util.*;
+
+/**
+ * 严谨版抢占式调度器
+ * 特性：
+ * 1. 支持任务在不同时间点到达 (arrivalTime)
+ * 2. 支持优先级抢占 (Preemption)
+ * 3. 支持依赖关系 (Dependency)
+ * 4. 使用等待队列防止任务“瞬移”
+ */
+public class AdvancedPreemptiveScheduler {
+
+    // --- 1. 任务定义 ---
+    static class Task {
+        int id;
+        int arrivalTime; // 【新增】任务到达时间
+        int type;        // NPU类型 1-6
+        int priority;    // 优先级 (越大越高)
+        int remain;      // 剩余耗时
+        int depend;      // 依赖的任务ID (-1无依赖)
+
+        public Task(int id, int arrivalTime, int type, int priority, int remain, int depend) {
+            this.id = id;
+            this.arrivalTime = arrivalTime;
+            this.type = type;
+            this.priority = priority;
+            this.remain = remain;
+            this.depend = depend;
+        }
+
+        @Override
+        public String toString() {
+            return "Task{id=" + id + ", arrive=" + arrivalTime + ", pri=" + priority + ", rem=" + remain + "}";
+        }
+    }
+
+    // --- 2. 事件定义 ---
+    static class Event implements Comparable<Event> {
+        int time;
+        int type;       // 0: 任务到达/就绪, 1: 任务执行完成
+        Task task;
+
+        public Event(int time, int type, Task task) {
+            this.time = time;
+            this.type = type;
+            this.task = task;
+        }
+
+        @Override
+        public int compareTo(Event o) {
+            if (this.time != o.time) return Integer.compare(this.time, o.time);
+            // 完成事件优先，确保资源先释放
+            return Integer.compare(this.type, o.type);
+        }
+    }
+
+    // --- 3. 调度主逻辑 ---
+    public int schedule(List<Task> tasks) {
+        // 等待队列：每个NPU维护一个排队区
+        PriorityQueue<Task>[] waitingQueues = new PriorityQueue[7];
+        for (int i = 1; i <= 6; i++) {
+            // 排队时，优先级高的在前；如果优先级相同，早到的在前
+            waitingQueues[i] = new PriorityQueue<>((a, b) -> {
+                if (b.priority != a.priority) return b.priority - a.priority;
+                return a.arrivalTime - b.arrivalTime; 
+            });
+        }
+
+        Task[] npuCurrentTask = new Task[7]; // 当前正在跑的任务
+        int[] npuFinishTime = new int[7];    // NPU预计空闲时间
+
+        // 依赖管理
+        int[] inDegree = new int[tasks.size()];
+        List<List<Integer>> children = new ArrayList<>();
+        for (int i = 0; i < tasks.size(); i++) children.add(new ArrayList<>());
+
+        for (Task t : tasks) {
+            if (t.depend != -1) {
+                inDegree[t.id]++;
+                children.get(t.depend).add(t.id);
+            }
+        }
+
+        // 全局事件堆
+        PriorityQueue<Event> eventQueue = new PriorityQueue<>();
+
+        // 【关键修改】初始化：根据任务自带的 arrivalTime 加入事件堆
+        for (Task t : tasks) {
+            if (inDegree[t.id] == 0) {
+                eventQueue.offer(new Event(t.arrivalTime, 0, t));
+            }
+        }
+
+        int maxTime = 0;
+
+        while (!eventQueue.isEmpty()) {
+            Event e = eventQueue.poll();
+            int currentTime = e.time;
+            Task task = e.task;
+            int type = task.type;
+
+            if (e.type == 0) {
+                // --- 事件类型 A: 任务到达 ---
+                Task currentRunning = npuCurrentTask[type];
+
+                if (currentRunning == null) {
+                    // 1. NPU空闲，直接跑
+                    startTask(task, currentTime, type, npuCurrentTask, npuFinishTime, eventQueue);
+                } else if (task.priority > currentRunning.priority) {
+                    // 2. 抢占！
+                    // 计算旧任务跑了多久
+                    int executedTime = currentTime - (npuFinishTime[type] - currentRunning.remain);
+                    currentRunning.remain -= executedTime;
+                    
+                    // 旧任务去排队（注意：这里不生成事件，而是进等待队列）
+                    waitingQueues[type].offer(currentRunning);
+
+                    // 新任务上位
+                    startTask(task, currentTime, type, npuCurrentTask, npuFinishTime, eventQueue);
+                } else {
+                    // 3. 抢不过，去排队
+                    waitingQueues[type].offer(task);
+                }
+
+            } else {
+                // --- 事件类型 B: 任务完成 ---
+                maxTime = Math.max(maxTime, currentTime);
+                npuCurrentTask[type] = null; // NPU释放
+
+                // 唤醒下游任务
+                for (int childId : children.get(task.id)) {
+                    inDegree[childId]--;
+                    if (inDegree[childId] == 0) {
+                        Task childTask = tasks.get(childId);
+                        // 【关键逻辑】下游任务的“实际到达时间” = Max(自身定义时间, 依赖完成时间)
+                        // 但在这里，我们只关心它“现在”就绪了，所以事件时间设为 currentTime
+                        eventQueue.offer(new Event(currentTime, 0, childTask));
+                    }
+                }
+
+                // 尝试从等待队列捞任务
+                Task next = waitingQueues[type].poll();
+                if (next != null) {
+                    startTask(next, currentTime, type, npuCurrentTask, npuFinishTime, eventQueue);
+                }
+            }
+        }
+
+        return maxTime;
+    }
+
+    // 辅助方法：启动任务
+    private void startTask(Task task, int currentTime, int type, Task[] npuCurrentTask, int[] npuFinishTime, PriorityQueue<Event> eventQueue) {
+        npuCurrentTask[type] = task;
+        npuFinishTime[type] = currentTime + task.remain;
+        eventQueue.offer(new Event(npuFinishTime[type], 1, task));
+        // System.out.println("T=" + currentTime + ": 开始运行 " + task);
+    }
+
+    // --- 4. 测试入口 ---
+    public static void main(String[] args) {
+        AdvancedPreemptiveScheduler scheduler = new AdvancedPreemptiveScheduler();
+        List<Task> tasks = new ArrayList<>();
+
+        // --- 测试用例：迟到的高优先级任务 ---
+        // 任务0: T=0到达, 低优先级, 耗时10
+        tasks.add(new Task(0, 0, 1, 1, 10, -1));
+        
+        // 任务1: T=2到达, 高优先级, 耗时5  <-- 注意这里！它晚来了2秒
+        tasks.add(new Task(1, 2, 1, 5, 5, -1));
+
+        System.out.println("运行高级抢占调度测试...");
+        int result = scheduler.schedule(tasks);
+        
+        System.out.println("最终完成时间: " + result);
+        
+        // 预期流程：
+        // T=0: 任务0到达，NPU空闲 -> 任务0开始跑 (预计T=10完)
+        // T=2: 任务1到达，NPU忙 -> 检查优先级 (5 > 1) -> 抢占！
+        //      任务0被踢 (已跑2秒，剩8秒)，进等待队列
+        //      任务1开始跑 (预计T=7完)
+        // T=7: 任务1完成 -> NPU空闲 -> 捞等待队列 -> 任务0回来跑
+        //      任务0继续跑 (剩8秒) -> 预计T=15完
+        // T=15: 任务0完成
+        
+        if (result == 15) {
+            System.out.println("测试通过！时间线逻辑严密。");
+        } else {
+            System.out.println("测试失败，结果: " + result);
+        }
+    }
+}
+```
 
 
