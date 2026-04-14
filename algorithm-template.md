@@ -1,4 +1,4 @@
-##并查集  
+## 并查集  
 并查集模板：
 ```java
     class UnionFind{
