@@ -858,7 +858,7 @@ public class AdvancedPreemptiveScheduler {
 
 这里有一道设计题 很有意思，培养自己的架构思维  
 
-题目 
+## 题目 实现负载均衡器接口  
 请实现以下接口:
 LoadBalanceSys(int procNum, int maxConnectNum)-初始化。 procNum 表示系统中进程数，进程 id 从0开始依  
 次编号，初始时都为下线状态； maxConnectNum 表示系统最多可保留的连接数  
